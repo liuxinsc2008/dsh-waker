@@ -1,0 +1,4 @@
+- insert:
+    - id: dsh-waker
+      name: 'dsh-waker'
+      config: {}
