@@ -1,7 +1,7 @@
 {
   "name": "dsh-waker",
   "version": "0.5.0",
-  "description": "跨会话往返：wake 把一条消息投给另一个会话、让它自己跑一轮；peek 读它回了什么；sessions 扫描会话列表并自动重建字典。target 可直接填 session-id（直接用，不查表），也可填名字（查自动重建的字典）。纯 Host bundle，无 UI。",
+  "description": "跨会话往返：sessions 扫描会话列表并自动重建字典；wake 把一条消息投给另一个会话、让它自己跑一轮；peek 读它回了什么。target 可直接填 session-id（直接用，不查表），也可填名字（查自动重建的字典）。★ 插件启动时会把自己复制进本机安装目录，源文件夹删了也不影响。纯 Host bundle，无 UI。",
   "keywords": [
     "deepseek-harness",
     "dsh",
