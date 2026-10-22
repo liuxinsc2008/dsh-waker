@@ -22,12 +22,43 @@ DSH 里同时开着几个会话时，它们各自有上下文、各自在干活�
 
 ---
 
-## 二、两个工具
+## 二、三个工具
+
+```
+sessions  ──▶  看到有哪些会话、各自 id 是什么
+   │
+   ├──wake──▶  派活过去，对方自己跑一轮
+   └──peek──▶  读它说了什么（⛔ 不会叫醒它）
+```
 
 | 工具 | 做什么 | 方向 |
 |:--|:--|:--|
+| `sessions(limit, namedOnly, readOnly, outFile)` | **扫描会话列表**，读回 `sessionId + 标题`；可选**自动生成字典** | 本机 → 你 |
 | `wake(target, content)` | 投一条消息过去，**让对方跑一轮** | 你 → 对方 |
 | `peek(target, mode, limit)` | **只读**对方说了什么（⛔ 不会叫醒它） | 对方 → 你 |
+
+### `sessions` 干什么用的
+
+**⇒ 你不用手抄 session-id 了。**
+
+它直接读 DSH 自己的会话投影（`$DSH_HOME/storages/session_projcache/sessions/*.json`
+里的 `title`），把「id + 标题」列出来。
+
+```
+★ 默认 readOnly=true ⇒ 只列出，⛔ 不写任何文件
+★ readOnly=false     ⇒ 顺便把它写成字典（默认 `会话id表.md`，已存在会先备份）
+```
+
+| 参数 | 说明 |
+|:--|:--|
+| `limit` | 最多列几个（默认 50，上限 500） |
+| `namedOnly` | 只列**有标题**的会话 |
+| `readOnly` | 默认 `true`；`false` ⇒ 写字典 |
+| `outFile` | `readOnly=false` 时写到哪（默认 `会话id表.md`，相对当前目录） |
+| `includeSubagents` | 也列子智能体会话（默认不列） |
+
+**⚠️ 它读到的是 DSH 的**投影缓存**，不是实时列表** —— 缓存由 DSH 自己维护，
+一般来说就够了。⛔ 它不会去 `wake` 任何会话（只读工具）。
 
 ### `target` 怎么填（v0.2.0）
 
@@ -53,47 +84,91 @@ $$\text{字典} = \text{检索用};\qquad ★\ \text{⛔ 不是插件的守门�
 
 ---
 
-## 三、装
+## 三、装（★★ 必须看这一节）
 
-$$\text{GUI} \to \text{插件} \to \text{「+ 添加插件」} \to \text{本地目录路径}$$
+### ★★★ 铁律：不管你怎么装，最后都要把插件【复制】进本地安装目录
 
-把本目录的路径填进去即可。装完 DSH 会给 agent 注册 `wake` / `peek` 两个工具。
+$$\text{装完} \Longrightarrow ★\ \textbf{插件真身必须在:}\ \texttt{\%DSH\_HOME\%\\profiles\\<profile>\\node_modules\\dsh-waker\\}$$
 
-### 为什么没有 UI
+**⛔ 不要用"链接 / Junction / 快捷方式"指向外面某个文件夹。**
+原因只有一条：**那个文件夹一删、一挪、一重命名，插件就废了，而你不会想到是这个原因。**
 
-`wake` / `peek` 需要 `sessionController` 和 `sessionQuery` 两个 **Host Service**。
-早期版本以为"只有客户端插件能拿到 sessionController"，**说反了** ——
-它本来就是 Host service。所以本插件**只要一个 `lib/index.js`**，不需要前端。
+**⛔ 也不要"解压到哪就从哪加载"** —— 那等于把插件绑死在那个位置。
+
+### 三种装法，都要落到同一个结果
+
+| 你怎么装 | ★ 装完必须做的 |
+|:--|:--|
+| 图形界面「+ 添加插件」填本地目录 | ★ **把它复制进 `node_modules\\dsh-waker\\`**（见下） |
+| `git clone` 到任意目录 | ★ **复制进 `node_modules\\dsh-waker\\`** |
+| `npm install dsh-waker` | **不用管，npm 已经装进去了** ✅ |
+
+**⇒ 复制命令（PowerShell，改 $src 即可）：**
+
+```powershell
+$src = "D:\你的\解压位置\dsh-waker"          # ← 改成你解压 / clone 的地方
+$dst = "$env:USERPROFILE\.dsh\profiles\desktop\node_modules\dsh-waker"
+
+# ⛔ 若 dst 已存在且是链接 ⇒ 先删链接（只删链接，不动源文件）
+$it = Get-Item $dst -EA SilentlyContinue
+if ($it -and $it.LinkType) { [System.IO.Directory]::Delete($dst, $false) }
+Remove-Item $dst -Recurse -Force -EA SilentlyContinue
+
+Copy-Item $src $dst -Recurse -Force
+```
+
+**⇒ 复制完，那个"源文件夹"就可以随便删了。**
+
+### 检查装对了没有
+
+```powershell
+$dst = "$env:USERPROFILE\.dsh\profiles\desktop\node_modules\dsh-waker"
+(Get-Item $dst).LinkType        # ← 必须是【空】；Junction / SymbolicLink = 没装好
+node --check "$dst\lib\index.js"
+```
+
+**⇒ 顺手把 profile 清单里的 `link:` 去掉：**
+
+```json
+// C:\Users\<你>\.dsh\profiles\desktop\package.json
+"dependencies": {
+  "dsh-waker": "0.4.0"          // ⛔ 不是 "link:D:/某个/外部/目录"
+}
+```
 
 ---
 
-## 四、会话 id 字典
+## 四、会话 id 字典在哪
 
-填**名字**时，插件去读一份 Markdown 表格：
+$$\text{字典} \to ★\ \texttt{\%DSH\_HOME\%\\waker-会话id表.md}$$
 
-```
+**⇒ 默认就是 `C:\\Users\\<你>\\.dsh\\waker-会话id表.md`**
+
+**⛔ 不放在插件目录里**，原因：
+
+- `npm install` 装的插件 ⇒ 包目录**只读 / 升级会被覆盖**
+- `git clone` 装的 ⇒ 在仓库里，**⛔ 不该写运行时数据**
+- 放 `%DSH_HOME%` ⇒ **三种装法都落到同一个地方**，重装 / 升级插件都不丢
+
+### ★★ 每次调用先重建
+
+$$\text{调用} \to \text{重建字典} \to \text{再执行}$$
+
+`sessions()` / `wake(名字)` / `peek(名字)` 都会**先重建字典再干活**。
+
+- **为什么**：会话会**新建 / 归档 / 分支** ⇒ 字典会过期 ⇒ 重建比"增量判断谁变了"简单且不会错
+- **代价**：每次多扫一遍目录（60+ 个 json ≈ 50–100ms）
+- **⚠️ 填 session-id 那条路不读字典**，也不重建（更快）
+
+### 字典长什么样
+
+```markdown
 | 名字 | id |
 |---|---|
-| 某个会话 | `session-xxxxxxxx-…` |
+| 某个会话 | `session-xxxxxxxx-...` |
 ```
 
-**文件在哪**由插件按以下顺序找：
-
-1. 显式配置（若提供 `workspaceRoot`）
-2. **从插件所在位置逐级上溯**，找含该表的目录
-3. 最后退回 `process.cwd()`
-
-**⚠️ 为什么不缓存：** 那份表会被改，缓存 = 造出第二份 = 两处口径。
-**⇒ 每次调用现读。**
-
-**⚠️ 如果你只填 id** —— **根本不会碰这个文件**（v0.2.0 起）。
-所以你可以完全不用字典，把 id 记在别处。
-
-**⚠️ 两个踩过的坑（代码注释里也写着）：**
-
-- 名字里可能是**破折号 `——`**（U+2014 ×2），不是 ASCII `-`
-- id 带 `session-` 前缀 ⇒ ⛔ 不能用"纯十六进制"字符类
-  （`s`/`e`/`i`/`o`/`n` 不在里面 ⇒ 一个都匹配不上）
+**⇒ 名字 = 会话标题。没有标题的会话，名字就用 id。**
 
 ---
 
@@ -134,6 +209,13 @@ $$\texttt{accepted: true} \not\Longrightarrow \text{活儿干完了}$$
 ---
 
 ## 七、版本
+
+### v0.3.0（2026-10-22）
+
+- ★ **新增 `sessions` 工具** —— 扫描会话列表（id + 标题），可自动生成字典
+  ⇒ 不用再手抄 session-id
+- 子智能体判断修正：原来按"有没有 `subagent` 投影"判，但**每个会话都有这个投影** ⇒ 读到 0 个；
+  改成看 `subagent.val.identity` 是否真的存在
 
 ### v0.2.0（2026-10-22）
 

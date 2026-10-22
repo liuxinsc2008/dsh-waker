@@ -10,6 +10,37 @@
  * 用法：node _selftest_peek.mjs
  */
 import fs from "node:fs/promises";
+// ★★★ 2026-10-22（v0.4.0）：resolveTarget / sessions 现在会【先重建字典】
+//   ⇒ 测试把 DSH_HOME 指到临时目录，并往里放【假的会话投影】
+//   ⇒ rebuildTable 扫到假投影 ⇒ 写出假字典 ⇒ 测试自洽，⛔ 不碰真数据
+import _osIso from "node:os";
+import _fsIso from "node:fs";
+import _pathIso from "node:path";
+const _ISO_HOME = _fsIso.mkdtempSync(_pathIso.join(_osIso.tmpdir(), "waker-iso-"));
+process.env.DSH_HOME = _ISO_HOME;
+const _ISO_SESS = _pathIso.join(_ISO_HOME, "storages", "session_projcache", "sessions");
+_fsIso.mkdirSync(_ISO_SESS, { recursive: true });
+
+/** ★ 造一个假会话投影（rebuildTable 会扫它） */
+function _fakeSession(sid, title, extraRows = {}) {
+  const rec = {
+    identity: { createdAt: 1000, formatVersion: 4 },
+    rows: Object.assign({
+      title: { val: title },
+      sessionListMetadata: { val: { lastPromptAt: 1000, blank: false } },
+    }, extraRows),
+  };
+  _fsIso.writeFileSync(_pathIso.join(_ISO_SESS, sid + ".json"),
+    JSON.stringify({ record: rec }), "utf8");
+}
+
+_fakeSession("session-11111111-1111-1111-1111-111111111111", "甲");
+_fakeSession("session-22222222-2222-2222-2222-222222222222", "乙");
+_fakeSession("session-33333333-3333-3333-3333-333333333333", "丙");
+
+process.on("exit", () => { try { _fsIso.rmSync(_ISO_HOME, { recursive: true, force: true }); } catch {} });
+
+
 
 // ★ 2026-10-16 20:40 改：原来这里写死了【绝对路径】（而且是旧位置
 //   `状态机/唤醒器`）⇒ 插件搬到 `插件/唤醒器` 后自检直接 ERR_MODULE_NOT_FOUND。
@@ -22,8 +53,9 @@ import _os from "node:os";
 import _fs from "node:fs";
 import _path from "node:path";
 
-const FAKE_DIR = _fs.mkdtempSync(_path.join(_os.tmpdir(), "waker-selftest-"));
-const FAKE_TABLE = _path.join(FAKE_DIR, "会话id表.md");
+const FAKE_DIR = _ISO_HOME;
+_fs.mkdirSync(_path.join(FAKE_DIR, "storages", "session_projcache", "sessions"), { recursive: true });
+const FAKE_TABLE = _path.join(_ISO_HOME, "waker-会话id表.md");
 _fs.writeFileSync(FAKE_TABLE, [
   "| 名字 | id |",
   "|---|---|",
